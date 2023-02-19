@@ -51,8 +51,8 @@ def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, Kanji
                     'meanings': ", ".join(data.senses[0].english_definitions),
                     'vocab': vocab,
                     'readings': ", ".join(unique([reading.reading for reading in data.japanese])),
-                    'kanjis': seperated_name,
-                    'kanjis_names': replace_kanjis_by_meaning(seperated_name, wanikani_data),
+                    'kanjis': seperated_name if len(wanikani_data) > 0 else '',
+                    'kanjis_names': replace_kanjis_by_meaning(seperated_name, wanikani_data) if len(wanikani_data) > 0 else '',
                     'type': ", ".join(data.senses[0].parts_of_speech),
                     'sound': ''
                 },
@@ -221,7 +221,7 @@ def get_vocab_data(vocab: str) -> Dict:
     data = Word.request(vocab, cache=True).data
     # Ensure the match is exact
     if data[0].slug != vocab:
-        raise ValueError('No exact match found')
+        raise ValueError(f'No exact match found. But found {data[0].slug}')
     return data[0]
 
 
