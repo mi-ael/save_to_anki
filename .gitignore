@@ -1,0 +1,5 @@
+wanikani_token
+wanikani_data.json
+.vscode
+venv
+temp

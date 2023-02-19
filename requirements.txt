@@ -1,0 +1,2 @@
+jisho-api
+requests
