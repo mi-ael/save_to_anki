@@ -241,6 +241,10 @@ def get_kanji_data(kanji: str) -> Dict:
 def get_vocab_data(vocab: str) -> Dict:
     """Get data for words from jisho.org API"""
     data = Word.request(vocab, cache=True).data
+
+    # remove -1 from slug (weird bug)
+    data[0].slug = data[0].slug.replace('-1', '')
+
     # Ensure the match is exact
     if data[0].slug != vocab:
         raise ValueError(f'No exact match found. But found {data[0].slug}')
