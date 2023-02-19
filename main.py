@@ -36,9 +36,22 @@ def replace_kanjis_by_meaning(seperated_name: str, wanikani_data: List[Dict]) ->
         seperated_name = seperated_name.replace(kanji_data['data']['characters'], kanji_data['data']['meanings'][0]['meaning'])
     return seperated_name
 
-def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, KanjiConfig], wanikani_data: List[Dict]):
+def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, KanjiConfig], wanikani_data: List[Dict], add_furigana_for_kanji: List[str]):
     """Create a new vocab card in anki"""
+
     seperated_name = separate_character_type_groups(vocab)
+
+
+    assert len(add_furigana_for_kanji) <= 1 # only one kanji can have furigana right now
+    for kanji in add_furigana_for_kanji:
+        assert kanji in vocab
+        reading = data.japanese[0].reading
+        vocab_without_kaji = ''.join([c for c in vocab if not is_kanji(c)])
+        furigana = reading.replace(vocab_without_kaji, '')
+        vocab = vocab.replace(kanji, f'{kanji}[{furigana}]')
+
+
+
     # create card in anki
     r = requests.post(ANKI_ADDRESS, json={
         'action': 'addNote',
@@ -187,13 +200,13 @@ def main():
     kanjis_data_jisho = []
 
     for kanji in kanjis:
-        kanjis_data_jisho += get_kanji_data(kanji)
+        kanjis_data_jisho += [get_kanji_data(kanji)]
     
     
     data_wanikani_kanjis_all = filter(lambda x: x['object'] == 'kanji', wanikani_data_all)
     kanji_data_wanikani = list(filter(lambda x: x['data']['characters'] in kanjis, data_wanikani_kanjis_all))
-        
-    create_vocab_card(vocab, data, kanjis_data_jisho, kanji_data_wanikani)
+
+    add_furigana_for_kanji = []
 
     # then search ankis database for each kanji in vocab
     for kanji, jisho_data in zip(kanjis, kanjis_data_jisho):
@@ -206,8 +219,17 @@ def main():
             }
         }) 
         if not r.json()['result']:
-            wanikani_data = list(filter(lambda x: x['data']['characters'] == kanji, kanji_data_wanikani))[0]
+            wanikani_data = None
+            try:
+                wanikani_data = list(filter(lambda x: x['data']['characters'] == kanji, kanji_data_wanikani))[0]
+            except IndexError:
+                print(f'Kanji {kanji} not found in wanikani data')
+                add_furigana_for_kanji += [kanji]
+                continue
             create_kanji_card(kanji, jisho_data, wanikani_data)
+
+    create_vocab_card(vocab, data, kanjis_data_jisho, kanji_data_wanikani, add_furigana_for_kanji)
+
 
       
 
