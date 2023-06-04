@@ -10,6 +10,7 @@ import json
 from typing import Dict, List
 
 ANKI_ADDRESS = 'http://127.0.0.1:8765'
+ANKI_DECK_RADICALS = 'TenTen::Radicals'
 ANKI_DECK_KANJIS = 'TenTen::Kanjis'
 ANKI_DECK_VOCABS = 'TenTen::Vocabs'
 
@@ -169,6 +170,40 @@ def create_kanji_card(kanji: str, jisho_data: KanjiConfig, wanikani_data: Dict):
     else:
         print(f'Kanji {kanji} added to deck')
 
+def get_radical_by_id(radical_id: int) -> Dict:
+    return next((radical for radical in wanikani_data_all if radical['id'] == radical_id), None)
+
+def create_radical_card(radical: Dict, wanikani_data: Dict):
+    """Create a new kanji card in anki"""
+    # get radicals data
+
+    # create card in anki
+    r = requests.post(ANKI_ADDRESS, json={
+        'action': 'addNote',
+        'version': 6,
+        'params': {
+            'note': {
+                'deckName': ANKI_DECK_RADICALS,
+                'modelName': 'TenTen_Radicals',
+                'fields': {
+                    'radical': get_radical_character(radical),
+                    'name': ", ".join([meaning['meaning'] for meaning in radical['data']['meanings']]),
+                    'meaning_mnemonic': radical['data']['meaning_mnemonic'],
+                },
+                'options': {
+                    'allowDuplicate': False
+                },
+                'tags': []
+            }
+        }
+    })
+
+    # print result
+    if r.json()['result'] is None:
+        print(f'Radical {radical["data"]["characters"]} already in deck')
+    else:
+        print(f'Radical {radical["data"]["characters"]} added to deck')
+
 def main():
     
     # get vocab from command line and catch error
@@ -227,6 +262,20 @@ def main():
                 add_furigana_for_kanji += [kanji]
                 continue
             create_kanji_card(kanji, jisho_data, wanikani_data)
+
+            # create card for each radical in kanji
+            for radical_id in wanikani_data['data']['component_subject_ids']:
+                radical = next((radical for radical in wanikani_data_all if radical['id'] == radical_id), None)
+                if radical is not None:
+                  r = requests.post(ANKI_ADDRESS, json={
+                      'action': 'findNotes',
+                      'version': 6,
+                      'params': {
+                          'query': f'deck:{ANKI_DECK_RADICALS} front:{radical["data"]["characters"]}'
+                      }
+                  }) 
+                  if not r.json()['result']:
+                      create_radical_card(radical, wanikani_data_all)
 
     create_vocab_card(vocab, data, kanjis_data_jisho, kanji_data_wanikani, add_furigana_for_kanji)
 
