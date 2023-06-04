@@ -14,6 +14,7 @@ ANKI_DECK_RADICALS = 'TenTen::Radicals'
 ANKI_DECK_KANJIS = 'TenTen::Kanjis'
 ANKI_DECK_VOCABS = 'TenTen::Vocabs'
 
+WANIKANI_API_KEY = open('wanikani_token').read().strip()
 wanikani_data_all = json.loads(open('wanikani_data.json', 'r').read())
 
 def separate_character_type_groups(vocab: str) -> str:
@@ -37,11 +38,34 @@ def replace_kanjis_by_meaning(seperated_name: str, wanikani_data: List[Dict]) ->
         seperated_name = seperated_name.replace(kanji_data['data']['characters'], kanji_data['data']['meanings'][0]['meaning'])
     return seperated_name
 
+def download_audio(vocab: str):
+    # find vokab in wanikani_data_all
+    vocab_data = next(filter(lambda x: x['data']['characters'] == vocab and x['object'] == 'vocabulary', wanikani_data_all), None)
+    if vocab_data is None:
+        print(f'Vocab {vocab} not found in wanikani data')
+        return None
+    # get male audio url
+    audio_urls = vocab_data['data']['pronunciation_audios']
+    audio_urls_male = list(filter(lambda x: x['metadata']['gender'] == 'male' and x['content_type'] == 'audio/mp3', audio_urls))
+    audio_url = audio_urls_male[0]['url'] if len(audio_urls_male) > 0 else None
+    if audio_url is None:
+        audio_url = audio_urls[0]['url'] if len(audio_urls) > 0 else None
+    if audio_url is None:
+        return None
+    
+    # download audio from url
+    r = requests.get(audio_url, headers={'Authorization': 'Bearer ' + WANIKANI_API_KEY})
+    assert r.status_code == 200
+    # get audio data
+    audio_bytes = r.content
+    return audio_bytes
+    
+
 def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, KanjiConfig], wanikani_data: List[Dict], add_furigana_for_kanji: List[str]):
     """Create a new vocab card in anki"""
 
     seperated_name = separate_character_type_groups(vocab)
-
+    audio = download_audio(vocab)
 
     assert len(add_furigana_for_kanji) <= 1 # only one kanji can have furigana right now
     for kanji in add_furigana_for_kanji:
@@ -51,7 +75,22 @@ def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, Kanji
         furigana = reading.replace(vocab_without_kaji, '')
         vocab = vocab.replace(kanji, f'{kanji}[{furigana}]')
 
-
+    # upload audio to anki
+    audio_name = None
+    if audio is not None:
+        r = requests.post(ANKI_ADDRESS, json={
+            'action': 'storeMediaFile',
+            'version': 6,
+            'params': {
+                'filename': f'{ANKI_DECK_VOCABS}_{base64.b64encode(vocab.encode("utf-8")).decode()}.mp3',
+                'data': base64.b64encode(audio).decode('utf-8')
+            }
+        })
+        audio_name = r.json()['result']
+        if audio_name is None:
+            print(f'Audio for {vocab} already exists')
+        else:
+            print(f'Created audio for {vocab}')
 
     # create card in anki
     r = requests.post(ANKI_ADDRESS, json={
@@ -68,7 +107,7 @@ def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, Kanji
                     'kanjis': seperated_name if len(wanikani_data) > 0 else '',
                     'kanjis_names': replace_kanjis_by_meaning(seperated_name, wanikani_data) if len(wanikani_data) > 0 else '',
                     'type': ", ".join(data.senses[0].parts_of_speech),
-                    'sound': ''
+                    'sound': f'[sound:{audio_name}]' if audio_name is not None else '',
                 },
                 'options': {
                     'allowDuplicate': False
