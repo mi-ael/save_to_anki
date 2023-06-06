@@ -70,7 +70,7 @@ def create_vocab_card(vocab: str, data: WordConfig, kanjis_data: Dict[str, Kanji
     assert len(add_furigana_for_kanji) <= 1 # only one kanji can have furigana right now
     for kanji in add_furigana_for_kanji:
         assert kanji in vocab
-        reading = data.japanese[0].reading
+        reading = data.japanese[0].reading if data.japanese[0].reading is None else data.japanese[0].reading
         vocab_without_kaji = ''.join([c for c in vocab if not is_kanji(c)])
         furigana = reading.replace(vocab_without_kaji, '')
         vocab = vocab.replace(kanji, f'{kanji}[{furigana}]')
@@ -190,7 +190,7 @@ def create_kanji_card(kanji: str, jisho_data: KanjiConfig, wanikani_data: Dict):
                     'meaning_hint': wanikani_data['data']['meaning_hint'],
                     'reading_mnemonic': wanikani_data['data']['reading_mnemonic'],
                     'reading_hint': wanikani_data['data']['reading_hint'],
-                    'radicals': " - ".join([get_radical_character(radical) for radical in radicals]),
+                    'radicals': " ".join([get_radical_character(radical) for radical in radicals]),
                     'radicals_names': " - ".join(radical['data']['meanings'][0]['meaning'] for radical in radicals),
                     'simmilar_kanji': ', '.join([similar_kanji['data']['characters'] for similar_kanji in similar_kanjis]),
                     'simmilar_kanji_names': ", ".join([similar_kanji['data']['meanings'][0]['meaning'] for similar_kanji in similar_kanjis]),
@@ -334,7 +334,7 @@ def get_vocab_data(vocab: str) -> Dict:
     data[0].slug = data[0].slug.replace('-1', '')
 
     # Ensure the match is exact
-    if data[0].slug != vocab:
+    if (data[0].japanese[0].word != vocab and data[0].japanese[0].reading != vocab) and not '〜' in vocab:
         raise ValueError(f'No exact match found. But found {data[0].slug}')
     return data[0]
 
