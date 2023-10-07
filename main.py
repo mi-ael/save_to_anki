@@ -55,7 +55,9 @@ def download_audio(vocab: str):
     
     # download audio from url
     r = requests.get(audio_url, headers={'Authorization': 'Bearer ' + WANIKANI_API_KEY})
-    assert r.status_code == 200
+    if r.status_code != 200:
+        print(f"Error: {r.content}")
+        exit(1)
     # get audio data
     audio_bytes = r.content
     return audio_bytes
@@ -145,21 +147,41 @@ def get_radicals_data(wanikani_data: Dict) -> List:
         radicals += [radical]
     return radicals
 
-def get_radical_character(radical: Dict) -> str:
+def get_radical_character(radical: Dict, smol: bool = False) -> str:
     character = radical['data']['characters']
     if character is not None:
         return character
     url = list(filter(
-        lambda x: x['content_type'] == 'image/png' and 
-        x['metadata']['style_name'] == '32px', 
+        lambda x: x['content_type'] == 'image/svg+xml',
         radical['data']['character_images']))[0]['url']
     # download image from url
     r = requests.get(url)
     # get image data
     image_bytes = r.content
-    # convert image data to base64 string
-    image_as_b64 = base64.b64encode(image_bytes).decode('utf-8')
-    return f'<img class="encoded_radical" src="data:image/png;base64,{image_as_b64}">'
+    name = radical['data']['meanings'][0]['meaning']
+    if r.status_code != 200:
+        assert false
+    filename = f"{ANKI_DECK_RADICALS}_{name}.svg"
+    r = requests.post(ANKI_ADDRESS, json={
+        'action': 'storeMediaFile',
+        'version': 6,
+        'params': {
+            'filename': filename,
+            'data': base64.b64encode(image_bytes).decode('utf-8')
+        }
+    })
+    image_name = r.json()['result']
+    print(f"img_name: {image_name}")
+    if image_name is None:
+        print(f'image for radical {name} already exists')
+    else:
+        print(f'Created radical img for {name}')
+
+    if smol:
+        return f'<img src="{image_name}" class="smol" >'
+    else:
+        return f'<img src="{image_name}">'
+    
 
 def get_similar_kanji_data(wanikani_data: Dict) -> List:
     similar_kanji = []
@@ -190,7 +212,7 @@ def create_kanji_card(kanji: str, jisho_data: KanjiConfig, wanikani_data: Dict):
                     'meaning_hint': wanikani_data['data']['meaning_hint'],
                     'reading_mnemonic': wanikani_data['data']['reading_mnemonic'],
                     'reading_hint': wanikani_data['data']['reading_hint'],
-                    'radicals': " ".join([get_radical_character(radical) for radical in radicals]),
+                    'radicals': " ".join([get_radical_character(radical, True) for radical in radicals]),
                     'radicals_names': " - ".join(radical['data']['meanings'][0]['meaning'] for radical in radicals),
                     'simmilar_kanji': ', '.join([similar_kanji['data']['characters'] for similar_kanji in similar_kanjis]),
                     'simmilar_kanji_names': ", ".join([similar_kanji['data']['meanings'][0]['meaning'] for similar_kanji in similar_kanjis]),
@@ -225,7 +247,7 @@ def create_radical_card(radical: Dict, wanikani_data: Dict):
                 'deckName': ANKI_DECK_RADICALS,
                 'modelName': 'TenTen_Radicals',
                 'fields': {
-                    'radical': get_radical_character(radical),
+                    'radical': get_radical_character(radical, False),
                     'name': ", ".join([meaning['meaning'] for meaning in radical['data']['meanings']]),
                     'meaning_mnemonic': radical['data']['meaning_mnemonic'],
                 },
@@ -324,11 +346,11 @@ def main():
 
 def get_kanji_data(kanji: str) -> Dict:
     """Get data for kanji from jisho.org API"""
-    return Kanji.request(kanji, cache=True).data
+    return Kanji.request(kanji, cache=False).data
 
 def get_vocab_data(vocab: str) -> Dict:
     """Get data for words from jisho.org API"""
-    data = Word.request(vocab, cache=True).data
+    data = Word.request(vocab, cache=False).data
 
     # remove -1 from slug (weird bug)
     data[0].slug = data[0].slug.replace('-1', '')
